@@ -1,0 +1,95 @@
+pipeline {
+    agent {
+        docker {
+            // Using pre-built Docker image with Maven and Chrome
+            image 'markhobson/maven-chrome:latest'
+            args '--shm-size=2g'
+        }
+    }
+    
+    environment {
+        BASE_URL = 'http://localhost:3000'
+    }
+    
+    stages {
+        stage('Checkout') {
+            steps {
+                echo 'Checking out code...'
+                checkout scm
+            }
+        }
+        
+        stage('Setup Application') {
+            steps {
+                echo 'Installing application dependencies...'
+                sh '''
+                    npm install
+                    cd backend && npm install && cd ..
+                '''
+            }
+        }
+        
+        stage('Start Application') {
+            steps {
+                echo 'Starting application...'
+                sh '''
+                    # Start backend
+                    cd backend
+                    nohup npm run dev > backend.log 2>&1 &
+                    cd ..
+                    
+                    # Start frontend
+                    nohup npm run dev > frontend.log 2>&1 &
+                    
+                    # Wait for application to be ready
+                    echo "Waiting for application to start..."
+                    sleep 30
+                    
+                    # Verify application is running
+                    curl -f http://localhost:3000 || exit 1
+                '''
+            }
+        }
+        
+        stage('Run Selenium Tests') {
+            steps {
+                echo 'Running Selenium tests...'
+                dir('Tests') {
+                    sh '''
+                        mvn clean test -Dbase.url=${BASE_URL}
+                    '''
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            echo 'Publishing test results...'
+            
+            // Publish TestNG results
+            junit 'Tests/target/surefire-reports/*.xml'
+            
+            // Archive test reports
+            archiveArtifacts artifacts: 'Tests/target/surefire-reports/**/*', allowEmptyArchive: true
+            
+            // Archive application logs
+            archiveArtifacts artifacts: '*.log', allowEmptyArchive: true
+            
+            // Cleanup
+            sh '''
+                # Kill application processes
+                pkill -f "npm run dev" || true
+                pkill -f "node" || true
+            '''
+        }
+        
+        success {
+            echo '✓ All tests passed successfully!'
+        }
+        
+        failure {
+            echo '✗ Tests failed. Check the reports for details.'
+        }
+    }
+}

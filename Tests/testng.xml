@@ -1,0 +1,8 @@
+<!DOCTYPE suite SYSTEM "https://testng.org/testng-1.0.dtd" >
+<suite name="LinkedIn Caption Generator Test Suite" verbose="1">
+    <test name="All Tests">
+        <classes>
+            <class name="com.linkedin.caption.tests.LinkedInCaptionGeneratorTests"/>
+        </classes>
+    </test>
+</suite>
